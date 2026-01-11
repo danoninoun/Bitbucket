@@ -1,4 +1,5 @@
 <?php
+// src/db.php
 function conectarBD() {
     $host = getenv('DB_HOST');
     $db   = getenv('DB_NAME');
@@ -6,7 +7,13 @@ function conectarBD() {
     $pass = getenv('DB_PASS');
     $charset = 'utf8mb4';
 
+    // Si no pilla las variables de entorno, usa valores por defecto
+    if (!$host) $host = 'localhost';
+    if (!$db)   $db   = 'empresa';
+    if (!$user) $user = 'root';
+
     $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+    
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -16,8 +23,8 @@ function conectarBD() {
     try {
         return new PDO($dsn, $user, $pass, $options);
     } catch (\PDOException $e) {
-        // En producción no se debe mostrar el error real por seguridad
-        throw new \PDOException($e->getMessage(), (int)$e->getCode());
+        // En producción no deberíamos mostrar el error real, pero para depurar sí:
+        die("Error de conexión a la BBDD: " . $e->getMessage());
     }
 }
 ?>

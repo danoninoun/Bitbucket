@@ -1,4 +1,5 @@
 <?php
+// public/index.php
 
 // 1. Incluimos los archivos de lógica
 require_once "../src/datos.php";
@@ -13,59 +14,55 @@ $registroExitoso = false;
 // 2. Comprobar si se ha enviado el formulario
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     
-    // Recogemos los datos usando TUS nombres de variables
-    // El operador ?? "" asigna una cadena vacía si no llega el dato
-    $datos["nombre"] = sanitizar($_POST["nombre"] ?? "");
-    $datos["apellidos"] = sanitizar($_POST["apellidos"] ?? "");
-    $datos["dni"] = sanitizar($_POST["dni"] ?? "");
+    // Recogemos los datos (Sanitizar debe estar en validaciones.php)
+    // Si no tienes la función sanitizar, usa htmlspecialchars
+    $datos["nombre"] = isset($_POST["nombre"]) ? trim(htmlspecialchars($_POST["nombre"])) : "";
+    $datos["apellidos"] = isset($_POST["apellidos"]) ? trim(htmlspecialchars($_POST["apellidos"])) : "";
+    $datos["dni"] = isset($_POST["dni"]) ? trim(htmlspecialchars($_POST["dni"])) : "";
     
-    $datos["correo"] = sanitizar($_POST["correo"] ?? "");
-    $datos["tlfno"] = sanitizar($_POST["tlfno"] ?? "");
-    $datos["fecha"] = sanitizar($_POST["fecha"] ?? "");
+    $datos["correo"] = isset($_POST["correo"]) ? trim(htmlspecialchars($_POST["correo"])) : "";
+    $datos["tlfno"] = isset($_POST["tlfno"]) ? trim(htmlspecialchars($_POST["tlfno"])) : "";
+    $datos["fecha"] = isset($_POST["fecha"]) ? trim(htmlspecialchars($_POST["fecha"])) : "";
     
-    $datos["provincia"] = sanitizar($_POST["provincia"] ?? "");
-    $datos["sede"] = sanitizar($_POST["sede"] ?? "");
-    $datos["departamento"] = sanitizar($_POST["departamento"] ?? "");
+    $datos["provincia"] = isset($_POST["provincia"]) ? $_POST["provincia"] : "";
+    $datos["sede"] = isset($_POST["sede"]) ? $_POST["sede"] : "";
+    $datos["departamento"] = isset($_POST["departamento"]) ? $_POST["departamento"] : "";
 
-    // 3. Validaciones (PHP)
-    
-    // DNI: Si el formato o la letra no cuadran
-    if (!validarDni($datos["dni"])) {
-        $errores["dni"] = "DNI incorrecto (revisa número y letra).";
+    // 3. Validaciones (PHP) - Asumimos que las funciones existen en validaciones.php
+    // Si no existen, comenta estas líneas para probar
+    if (function_exists('validarDni') && !validarDni($datos["dni"])) {
+        $errores["dni"] = "DNI incorrecto.";
+    }
+    if (function_exists('validarEmail') && !validarEmail($datos["correo"])) {
+        $errores["correo"] = "Correo inválido.";
+    }
+    if (function_exists('validarTlfn') && !validarTlfn($datos["tlfno"])) {
+        $errores["tlfno"] = "Teléfono incorrecto (9 dígitos).";
     }
 
-    // Correo: Si el formato no es de email
-    if (!validarEmail($datos["correo"])) {
-        $errores["correo"] = "Formato de correo inválido.";
-    }
-
-    // Teléfono: Si no tiene 9 dígitos
-    if (!validarTlfn($datos["tlfno"])) {
-        $errores["tlfno"] = "Debe tener 9 dígitos.";
-    }
-
-    // Validar Selects: Importante por seguridad
-    if (!validarOpcion($datos["provincia"], $provincias)) $errores["provincia"] = "Elige una provincia válida.";
-    if (!validarOpcion($datos["sede"], $sedes)) $errores["sede"] = "Elige una sede válida.";
-    if (!validarOpcion($datos["departamento"], $departamentos)) $errores["departamento"] = "Elige un departamento válido.";
+    // Validar que los IDs de los selects existen en los arrays cargados de la BBDD
+    if (!array_key_exists($datos["provincia"], $provincias)) $errores["provincia"] = "Provincia inválida.";
+    if (!array_key_exists($datos["sede"], $sedes)) $errores["sede"] = "Sede inválida.";
+    if (!array_key_exists($datos["departamento"], $departamentos)) $errores["departamento"] = "Departamento inválido.";
 
     // Si no hay errores, intentamos guardar en BBDD
     if (empty($errores)) {
         try {
-            // Reutilizamos la conexión que ya abrimos en datos.php
-            // o abrimos una nueva si fuera necesario
+            // Reutilizamos la conexión de datos.php
             if (!isset($pdo)) { 
                 require_once "../src/db.php";
                 $pdo = conectarBD(); 
             }
 
-            // Preparamos la sentencia SQL (Prepared Statement)
-            $sql = "INSERT INTO empleados (nombre, apellidos, dni, email, telefono, fecha_alta, provincia_id, sede_id, departamento_id) 
-                    VALUES (:nombre, :apellidos, :dni, :email, :tlfno, :fecha, :provincia, :sede, :departamento)";
+            // CORRECCIÓN IMPORTANTE:
+            // La tabla empleados tiene: nombre, apellidos, dni, email, telefono, fecha_alta, id_sede, id_departamento
+            // NO tiene provincia_id (porque la sede ya pertenece a una provincia)
+            
+            $sql = "INSERT INTO empleados (nombre, apellidos, dni, email, telefono, fecha_alta, id_sede, id_departamento) 
+                    VALUES (:nombre, :apellidos, :dni, :email, :tlfno, :fecha, :sede, :departamento)";
             
             $stmt = $pdo->prepare($sql);
             
-            // Ejecutamos pasando los datos limpios
             $stmt->execute([
                 ':nombre'       => $datos["nombre"],
                 ':apellidos'    => $datos["apellidos"],
@@ -73,16 +70,41 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 ':email'        => $datos["correo"],
                 ':tlfno'        => $datos["tlfno"],
                 ':fecha'        => $datos["fecha"],
-                ':provincia'    => $datos["provincia"], // Aquí llega el ID del select
-                ':sede'         => $datos["sede"],      // Aquí llega el ID del select
-                ':departamento' => $datos["departamento"] // Aquí llega el ID del select
+                ':sede'         => $datos["sede"],         // ID de la sede
+                ':departamento' => $datos["departamento"]  // ID del departamento
             ]);
 
             $registroExitoso = true;
 
         } catch (PDOException $e) {
-            // Si falla el insert (ej: DNI duplicado si lo pusiste UNIQUE en SQL)
-            $errores["general"] = "Error al guardar en base de datos: " . $e->getMessage();
+            $errores["general"] = "Error BBDD: " . $e->getMessage();
+        }
+    }
+}
+
+// Función auxiliar 'old' por si no está en vistas.php
+if (!function_exists('old')) {
+    function old($campo, $datos) {
+        return isset($datos[$campo]) ? $datos[$campo] : "";
+    }
+}
+
+// Función auxiliar 'mostrarError' por si no está
+if (!function_exists('mostrarError')) {
+    function mostrarError($campo, $errores) {
+        if (isset($errores[$campo])) {
+            echo '<span class="error-msg">' . $errores[$campo] . '</span>';
+        }
+    }
+}
+
+// Función auxiliar 'pintarSelectOpciones' por si no está
+if (!function_exists('pintarSelectOpciones')) {
+    function pintarSelectOpciones($opciones, $seleccionado) {
+        echo '<option value="">-- Seleccione una opción --</option>';
+        foreach ($opciones as $id => $nombre) {
+            $selected = ($id == $seleccionado) ? 'selected' : '';
+            echo "<option value=\"$id\" $selected>$nombre</option>";
         }
     }
 }
@@ -93,27 +115,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulario empleados</title>
-    <!-- Mantenemos el CSS para que se vea decente -->
+    <title>Formulario empleados Cloud</title>
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 
 <div class="container">
-    <h1>Gestión de Empleados</h1>
+    <h1>Gestión de Empleados (Cloud)</h1>
 
     <?php if ($registroExitoso): ?>
-        <!-- VISTA DE ÉXITO -->
         <div class="success-box">
-            <h2>✅ Alta correcta</h2>
+            <h2>✅ Alta correcta en AWS RDS</h2>
             <p>Datos registrados:</p>
             <ul>
                 <li><strong>Nombre:</strong> <?php echo $datos["nombre"] . " " . $datos["apellidos"]; ?></li>
                 <li><strong>DNI:</strong> <?php echo $datos["dni"]; ?></li>
-                <li><strong>Correo:</strong> <?php echo $datos["correo"]; ?></li>
-                <li><strong>Teléfono:</strong> <?php echo $datos["tlfno"]; ?></li>
-                <li><strong>Fecha:</strong> <?php echo $datos["fecha"]; ?></li>
-                <li><strong>Provincia:</strong> <?php echo $provincias[$datos["provincia"]]; ?></li>
                 <li><strong>Sede:</strong> <?php echo $sedes[$datos["sede"]]; ?></li>
                 <li><strong>Departamento:</strong> <?php echo $departamentos[$datos["departamento"]]; ?></li>
             </ul>
@@ -122,47 +138,43 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     <?php else: ?>
         
-        <!-- FORMULARIO -->
+        <?php if (isset($errores["general"])): ?>
+            <div style="background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                <?php echo $errores["general"]; ?>
+            </div>
+        <?php endif; ?>
+
         <form action="index.php" method="POST">
-            
             <div class="form-group">
-                <label for="nombre">Escribe tu nombre:</label>
-                <!-- Usamos value para que no se borre si hay error -->
+                <label for="nombre">Nombre:</label>
                 <input type="text" id="nombre" name="nombre" required value="<?php echo old("nombre", $datos); ?>">
             </div>
-
             <div class="form-group">
-                <label for="apellidos">Escribe tus apellidos:</label>
+                <label for="apellidos">Apellidos:</label>
                 <input type="text" id="apellidos" name="apellidos" required value="<?php echo old("apellidos", $datos); ?>">
             </div>
-
             <div class="form-group">
-                <label for="dni">Escribe tu DNI:</label>
-                <input type="text" id="dni" name="dni" placeholder="12345678A" required value="<?php echo old("dni", $datos); ?>">
+                <label for="dni">DNI:</label>
+                <input type="text" id="dni" name="dni" required value="<?php echo old("dni", $datos); ?>">
                 <?php mostrarError("dni", $errores); ?>
             </div>
-
             <div class="form-group">
-                <label for="correo">Indica tu correo electrónico:</label>
+                <label for="correo">Correo:</label>
                 <input type="email" id="correo" name="correo" required value="<?php echo old("correo", $datos); ?>">
                 <?php mostrarError("correo", $errores); ?>
             </div>
-
             <div class="form-group">
-                <label for="tlfno">Escribe tu teléfono:</label>
+                <label for="tlfno">Teléfono:</label>
                 <input type="tel" id="tlfno" name="tlfno" required value="<?php echo old("tlfno", $datos); ?>">
                 <?php mostrarError("tlfno", $errores); ?>
             </div>
-
             <div class="form-group">
                 <label for="fecha">Fecha de alta:</label>
                 <input type="date" id="fecha" name="fecha" required value="<?php echo old("fecha", $datos); ?>">
             </div>
 
-            <!-- IMPORTANTE: Selects con arrays PHP -->
-            
             <div class="form-group">
-                <label for="provincia">Elige tu provincia:</label>
+                <label for="provincia">Provincia:</label>
                 <select name="provincia" id="provincia" required>
                     <?php pintarSelectOpciones($provincias, old("provincia", $datos)); ?>
                 </select>
@@ -170,7 +182,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
             <div class="form-group">
-                <label for="sede">Elige tu sede:</label>
+                <label for="sede">Sede:</label>
                 <select name="sede" id="sede" required>
                     <?php pintarSelectOpciones($sedes, old("sede", $datos)); ?>
                 </select>
@@ -178,7 +190,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
             <div class="form-group">
-                <label for="departamento">Elige tu departamento:</label>
+                <label for="departamento">Departamento:</label>
                 <select name="departamento" id="departamento" required>
                     <?php pintarSelectOpciones($departamentos, old("departamento", $datos)); ?>
                 </select>
