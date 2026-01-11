@@ -49,9 +49,41 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if (!validarOpcion($datos["sede"], $sedes)) $errores["sede"] = "Elige una sede válida.";
     if (!validarOpcion($datos["departamento"], $departamentos)) $errores["departamento"] = "Elige un departamento válido.";
 
-    // Si no hay errores, marcamos éxito
+    // Si no hay errores, intentamos guardar en BBDD
     if (empty($errores)) {
-        $registroExitoso = true;
+        try {
+            // Reutilizamos la conexión que ya abrimos en datos.php
+            // o abrimos una nueva si fuera necesario
+            if (!isset($pdo)) { 
+                require_once "../src/db.php";
+                $pdo = conectarBD(); 
+            }
+
+            // Preparamos la sentencia SQL (Prepared Statement)
+            $sql = "INSERT INTO empleados (nombre, apellidos, dni, email, telefono, fecha_alta, provincia_id, sede_id, departamento_id) 
+                    VALUES (:nombre, :apellidos, :dni, :email, :tlfno, :fecha, :provincia, :sede, :departamento)";
+            
+            $stmt = $pdo->prepare($sql);
+            
+            // Ejecutamos pasando los datos limpios
+            $stmt->execute([
+                ':nombre'       => $datos["nombre"],
+                ':apellidos'    => $datos["apellidos"],
+                ':dni'          => $datos["dni"],
+                ':email'        => $datos["correo"],
+                ':tlfno'        => $datos["tlfno"],
+                ':fecha'        => $datos["fecha"],
+                ':provincia'    => $datos["provincia"], // Aquí llega el ID del select
+                ':sede'         => $datos["sede"],      // Aquí llega el ID del select
+                ':departamento' => $datos["departamento"] // Aquí llega el ID del select
+            ]);
+
+            $registroExitoso = true;
+
+        } catch (PDOException $e) {
+            // Si falla el insert (ej: DNI duplicado si lo pusiste UNIQUE en SQL)
+            $errores["general"] = "Error al guardar en base de datos: " . $e->getMessage();
+        }
     }
 }
 ?>

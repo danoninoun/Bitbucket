@@ -1,28 +1,27 @@
 <?php
-// Array de Provincias
-$provincias = [
-    "madrid" => "Madrid",
-    "barcelona" => "Barcelona",
-    "sevilla" => "Sevilla",
-    "valencia" => "Valencia",
-    "zaragoza" => "Zaragoza",
-    "malaga" => "Málaga"
-];
+require_once 'db.php';
 
-// Array de Sedes
-$sedes = [
-    "central" => "Sede Central",
-    "norte" => "Delegación Norte",
-    "sur" => "Delegación Sur",
-    "este" => "Delegación Este"
-];
+try {
+    $pdo = conectarBD();
 
-// Array de Departamentos
-$departamentos = [
-    "it" => "Tecnología e Informática",
-    "rrhh" => "Recursos Humanos",
-    "finanzas" => "Contabilidad y Finanzas",
-    "marketing" => "Marketing y Ventas",
-    "logistica" => "Logística"
-];
+    // 1. Obtener Provincias
+    $stmt = $pdo->query("SELECT id, nombre FROM provincias");
+    // Creamos un array asociativo id => nombre
+    $provincias = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    // 2. Obtener Sedes
+    $stmt = $pdo->query("SELECT id, nombre FROM sedes");
+    $sedes = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    // 3. Obtener Departamentos
+    $stmt = $pdo->query("SELECT id, nombre FROM departamentos");
+    $departamentos = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+} catch (PDOException $e) {
+    // Si falla la BD, dejamos arrays vacíos para que no rompa la web
+    $provincias = [];
+    $sedes = [];
+    $departamentos = [];
+    $errorConexion = "Error cargando datos: " . $e->getMessage();
+}
 ?>
